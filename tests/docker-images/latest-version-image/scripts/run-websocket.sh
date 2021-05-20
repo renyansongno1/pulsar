@@ -18,6 +18,12 @@
 # under the License.
 #
 
+bin/apply-config-from-env.py conf/proxy.conf && \
+    bin/apply-config-from-env.py conf/pulsar_env.sh
 
-PROTOC=${PROTOC:-protoc}
-${PROTOC} --java_out=pulsar-transaction/coordinator/src/main/java pulsar-transaction/coordinator/src/main/proto/PulsarTransactionMetadata.proto
+if [ -z "$NO_AUTOSTART" ]; then
+    sed -i 's/autostart=.*/autostart=true/' /etc/supervisord/conf.d/proxy.conf
+fi
+
+bin/watch-znode.py -z $zookeeperServers -p /initialized-$clusterName -w
+exec /usr/bin/supervisord -c /etc/supervisord.conf

@@ -18,25 +18,21 @@
 # under the License.
 #
 
-# Fail script in case of errors
-set -e
+set -x
 
-ROOT_DIR=$(git rev-parse --show-toplevel)
-COMMON_DIR=$ROOT_DIR/
-cd $COMMON_DIR
+ZNODE="/initialized-$clusterName"
 
-BUILD_IMAGE_NAME="${BUILD_IMAGE_NAME:-apachepulsar/pulsar-build}"
-BUILD_IMAGE_VERSION="${BUILD_IMAGE_VERSION:-ubuntu-16.04}"
+bin/watch-znode.py -z $zkServers -p / -w
 
-IMAGE="$BUILD_IMAGE_NAME:$BUILD_IMAGE_VERSION"
-
-echo $IMAGE
-
-# Force to pull image in case it was updated
-docker pull $IMAGE
-
-WORKDIR=/workdir
-docker run -i \
-    -v ${COMMON_DIR}:${WORKDIR} $IMAGE \
-    bash -c "cd ${WORKDIR}; PROTOC=/pulsar/protobuf/src/protoc ./pulsar-transaction/coordinator/generate_protobuf.sh"
-
+bin/watch-znode.py -z $zkServers -p $ZNODE -e
+if [ $? != 0 ]; then
+    echo Initializing cluster
+    bin/apply-config-from-env.py conf/bookkeeper.conf &&
+        bin/pulsar initialize-cluster-metadata --cluster $clusterName --zookeeper $zkServers \
+                   --configuration-store $configurationStore --web-service-url http://$pulsarNode:8080/ \
+                   --broker-service-url pulsar://$pulsarNode:6650/ &&
+        bin/watch-znode.py -z $zkServers -p $ZNODE -c
+    echo Initialized
+else
+    echo Already Initialized
+fi
